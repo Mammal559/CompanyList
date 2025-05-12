@@ -1,34 +1,84 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+import os
+import plotly.express as px
+
+st.set_page_config(page_title="Company List", layout="wide")
 
 # Load data
-file_path = 'gaborone_companies_with_tracking.csv'
-df = pd.read_csv(file_path)
+csv_file = "gaborone_companies_with_tracking.csv"
+if os.path.exists(csv_file):
+    df = pd.read_csv(csv_file)
+else:
+    df = pd.DataFrame(columns=[
+        "Company Name", "Address", "Phone Number", "Website (Profile Link)",
+        "Description", "Contacted", "Date Contacted", "Response Received", 
+        "Response Date", "Notes"
+    ])
 
-st.title("📞 Company Contact Tracker")
+# Ensure proper date formats
+df["Date Contacted"] = pd.to_datetime(df["Date Contacted"], errors='coerce')
+df["Response Date"] = pd.to_datetime(df["Response Date"], errors='coerce')
 
-# Editable table row-by-row
-for i in df.index:
-    with st.expander(f"{df['Company Name'][i]}"):
-        st.write(f"**Address:** {df['Address'][i]}")
-        st.write(f"**Phone:** {df['Phone Number'][i]}")
-        st.markdown(f"**Website:** [{df['Website (Profile Link)'][i]}]({df['Website (Profile Link)'][i]})")
-        st.write(f"**Description:** {df['Description'][i]}")
-        
-        # Editable fields
-        df.at[i, 'Contacted'] = st.selectbox("Contacted?", ['No', 'Yes'], index=['No', 'Yes'].index(df['Contacted'][i]), key=f"contacted_{i}")
-        df.at[i, 'Date Contacted'] = st.date_input("Date Contacted", 
-                                                   value=pd.to_datetime(df['Date Contacted'][i]) if pd.notna(df['Date Contacted'][i]) and df['Date Contacted'][i] else datetime.today(), 
-                                                   key=f"date_contacted_{i}") if df.at[i, 'Contacted'] == 'Yes' else ''
-        df.at[i, 'Response Received'] = st.selectbox("Response Received?", ['No', 'Yes'], index=['No', 'Yes'].index(df['Response Received'][i]), key=f"response_{i}")
-        df.at[i, 'Response Date'] = st.date_input("Response Date", 
-                                                  value=pd.to_datetime(df['Response Date'][i]) if pd.notna(df['Response Date'][i]) and df['Response Date'][i] else datetime.today(), 
-                                                  key=f"response_date_{i}") if df.at[i, 'Response Received'] == 'Yes' else ''
-        df.at[i, 'Notes'] = st.text_area("Notes", value=df['Notes'][i], key=f"notes_{i}")
+# Sidebar filters
+st.sidebar.header("🔍 Filters")
+search_query = st.sidebar.text_input("Search by Company Name")
+filter_contacted = st.sidebar.selectbox("Filter by Contacted", ["All", "Yes", "No"])
+filter_response = st.sidebar.selectbox("Filter by Response Received", ["All", "Yes", "No"])
 
-st.markdown("---")
-if st.button("💾 Save Updates"):
-    df.to_csv(file_path, index=False)
-    st.success("Updates saved to CSV!")
+# Apply filters
+filtered_df = df.copy()
+if search_query:
+    filtered_df = filtered_df[filtered_df["Company Name"].str.contains(search_query, case=False, na=False)]
+if filter_contacted != "All":
+    filtered_df = filtered_df[filtered_df["Contacted"] == filter_contacted]
+if filter_response != "All":
+    filtered_df = filtered_df[filtered_df["Response Received"] == filter_response]
 
+# Title
+st.title("📇 Company List Tracker")
+
+# Editable table
+edited_df = st.data_editor(
+    filtered_df,
+    num_rows="dynamic",
+    use_container_width=True,
+    column_config={
+        "Date Contacted": st.column_config.DateColumn("Date Contacted", format="YYYY-MM-DD"),
+        "Response Date": st.column_config.DateColumn("Response Date", format="YYYY-MM-DD"),
+        "Contacted": st.column_config.SelectboxColumn("Contacted", options=["Yes", "No", ""]),
+        "Response Received": st.column_config.SelectboxColumn("Response Received", options=["Yes", "No", ""]),
+    },
+    key="company_edit"
+)
+
+# Save button
+if st.button("💾 Save Changes"):
+    edited_df.to_csv(csv_file, index=False)
+    st.success("Changes saved successfully!")
+
+# Charts section
+st.subheader("📊 Company Contact Analysis")
+
+col1, col2 = st.columns(2)
+
+# Pie chart: Contacted
+with col1:
+    contacted_counts = df["Contacted"].value_counts(dropna=True).reindex(["Yes", "No"], fill_value=0)
+    fig1 = px.pie(values=contacted_counts.values, names=contacted_counts.index, title="Contacted Distribution")
+    st.plotly_chart(fig1, use_container_width=True)
+
+# Bar chart: Response Received by Date
+with col2:
+    if not df["Response Date"].isna().all():
+        response_by_date = df.dropna(subset=["Response Date"])
+        count_by_date = response_by_date.groupby(response_by_date["Response Date"].dt.date).size().reset_index(name="Responses")
+        fig2 = px.bar(count_by_date, x="Response Date", y="Responses", title="Responses Over Time")
+        st.plotly_chart(fig2, use_container_width=True)
+
+# Line chart: Date Contacted over time
+if not df["Date Contacted"].isna().all():
+    contact_by_date = df.dropna(subset=["Date Contacted"])
+    contact_counts = contact_by_date.groupby(contact_by_date["Date Contacted"].dt.date).size().reset_index(name="Contacts")
+    fig3 = px.line(contact_counts, x="Date Contacted", y="Contacts", title="Contacts Over Time")
+    st.plotly_chart(fig3, use_container_width=True)
