@@ -35,6 +35,7 @@ if filter_contacted != "All":
     filtered_df = filtered_df[filtered_df["Contacted"] == filter_contacted]
 if filter_response != "All":
     filtered_df = filtered_df[filtered_df["Response Received"] == filter_response]
+filtered_df["Notes"] = filtered_df["Notes"].astype(str)
 
 # Title
 st.title("📇 Company List Tracker")
@@ -49,6 +50,7 @@ edited_df = st.data_editor(
         "Response Date": st.column_config.DateColumn("Response Date", format="YYYY-MM-DD"),
         "Contacted": st.column_config.SelectboxColumn("Contacted", options=["Yes", "No", ""]),
         "Response Received": st.column_config.SelectboxColumn("Response Received", options=["Yes", "No", ""]),
+        "Notes": st.column_config.TextColumn("Notes"),
     },
     key="company_edit"
 )
