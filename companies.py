@@ -57,8 +57,27 @@ edited_df = st.data_editor(
 
 # Save button
 if st.button("💾 Save Changes"):
-    edited_df.to_csv(csv_file, index=False)
-    st.success("Changes saved successfully!")
+    # If Delete column is present in edited_df
+    if "Delete" in edited_df.columns:
+        edited_df = edited_df.copy()
+
+        # Identify deleted rows based on index
+        edited_df = edited_df[edited_df["Delete"] != True].drop(columns=["Delete"], errors="ignore")
+
+    # Update only the matching rows in the full df (by index)
+    df.update(edited_df)
+
+    # Add new rows (if any were added in the editor)
+    new_rows = edited_df[~edited_df.index.isin(df.index)]
+    df = pd.concat([df, new_rows], ignore_index=True)
+
+    # Now drop deleted rows from original df
+    if "Delete" in st.session_state:
+        deleted_ids = st.session_state["Delete"]
+        df = df.drop(index=deleted_ids, errors='ignore')
+
+    df.to_csv(csv_file, index=False)
+    st.success("✅ All changes saved, including additions and deletions.")
 
 # Charts section
 st.subheader("📊 Company Contact Analysis")
